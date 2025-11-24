@@ -1,0 +1,10 @@
+{
+  "name": "telerivet-test",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@slack/web-api": "^7.12.0",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1"
+  }
+}
