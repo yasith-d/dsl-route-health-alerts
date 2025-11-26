@@ -43,25 +43,25 @@ function logError(context, error) {
   }
 }
 
-// --- Persist unhealthy routes to DB ---
+// --- Persist unhealthy routes to DB (batch insert) ---
 async function storeUnhealthyRoutes(unhealthyRoutes, runId) {
   if (!Array.isArray(unhealthyRoutes) || unhealthyRoutes.length === 0) return;
 
   const client = await pool.connect();
   try {
-    const query = `
-      INSERT INTO unhealthy_routes_log (
-        run_id, route_id, route_name, phone_number, country,
-        app_version, battery, charging, last_active_time, issues
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    `;
+    const columns = [
+      "run_id", "route_id", "route_name", "phone_number", "country",
+      "app_version", "battery", "charging", "last_active_time", "issues"
+    ];
 
-    for (const r of unhealthyRoutes) {
-      // In case route id is null by telerivet, put uuid for tracing purposes
+    const values = [];
+    const placeholders = [];
+
+    unhealthyRoutes.forEach((r, i) => {
       const safeRouteId = r.id ?? `unknown-${crypto.randomUUID()}`;
+      const offset = i * columns.length;
 
-      const values = [
+      values.push(
         runId,
         safeRouteId,
         r.name || null,
@@ -72,21 +72,25 @@ async function storeUnhealthyRoutes(unhealthyRoutes, runId) {
         typeof r.charging === "boolean" ? r.charging : null,
         typeof r.last_active_time === "number" ? r.last_active_time : null,
         JSON.stringify(r.issues ?? [])
-      ];
+      );
 
-      try {
-        await client.query(query, values);
-      } catch (err) {
-        logError("DB Insert Error (single route)", err);
-        // continue inserting others
-      }
+      // Build placeholders for this row: ($1,$2,...,$10), ($11,$12,...)
+      const rowPlaceholders = columns.map((_, colIdx) => `$${offset + colIdx + 1}`);
+      placeholders.push(`(${rowPlaceholders.join(",")})`);
+    });
+
+    if (values.length > 0) {
+      const query = `INSERT INTO unhealthy_routes_log (${columns.join(",")}) VALUES ${placeholders.join(",")}`;
+      await client.query(query, values);
     }
+
   } catch (err) {
-    logError("DB Insert Error (outer)", err);
+    logError("DB Batch Insert Error", err);
   } finally {
     client.release();
   }
 }
+
 
 // --- Send Slack alert ---
 async function sendSlackAlert(unhealthyRoutes, runId) {
