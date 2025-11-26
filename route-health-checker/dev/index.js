@@ -69,8 +69,12 @@ async function testTelerivetRoutes() {
       return;
     }
 
-    const routes = Array.isArray(response.data.data) ? response.data.data : [];
-    console.log(`Total routes found: ${routes.length}`);
+    const allRoutes = Array.isArray(response.data.data) ? response.data.data : [];
+    
+    // Filter only DSL-managed mobile routes using defined route variable
+    const routes = allRoutes.filter(r => r.vars?.dsl_managed === true);
+    
+    console.log(`Total DSL routes found: ${routes.length}`);
 
     const unhealthyRoutes = [];
     const now = Date.now();
@@ -78,6 +82,7 @@ async function testTelerivetRoutes() {
     for (const r of routes) {
       const issues = [];
 
+      // Last active time is NOT the internet connectivity
       // 1. Always flag if last_active_time is greater than 0
       if (!r.last_active_time) {
         issues.push("Never reported active");
@@ -126,7 +131,7 @@ async function testTelerivetRoutes() {
     console.log(`Unhealthy routes: ${unhealthyRoutes.length}`);
     console.log(JSON.stringify(unhealthyRoutes, null, 2));
 
-    await sendSlackAlert(unhealthyRoutes);
+    // await sendSlackAlert(unhealthyRoutes);
   } catch (err) {
     logError("Unexpected Error", err);
   }
